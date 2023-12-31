@@ -1,0 +1,8 @@
+<h1>It works!</h1>
+
+<h2>Nodes:</h2>
+<ul>
+  <%= for node <- @nodes do %>
+    <ul><%= IO.inspect(node) %></ul>
+  <% end %>
+</ul>
