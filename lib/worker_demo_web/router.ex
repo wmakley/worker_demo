@@ -18,9 +18,16 @@ defmodule WorkerDemoWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-  end
 
-  live "/workers", WorkerDemoWeb.Live.WorkerDashboard
+    live "/workers", DashboardLive.Index, :index
+
+    live "/users", UserLive.Index, :index
+    live "/users/new", UserLive.Index, :new
+    live "/users/:id/edit", UserLive.Index, :edit
+
+    live "/users/:id", UserLive.Show, :show
+    live "/users/:id/show/edit", UserLive.Show, :edit
+  end
 
   # Other scopes may use custom stacks.
   # scope "/api", WorkerDemoWeb do
