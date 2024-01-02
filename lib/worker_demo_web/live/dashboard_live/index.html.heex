@@ -1,15 +1,44 @@
 <.header>
-  Listing Jobs and Workers
+  Jobs
   <:actions>
-    <.link patch={~p"/jobs/new"}>
+    <.link patch={~p"/dashboard/new_job"}>
       <.button>New Job</.button>
     </.link>
   </:actions>
 </.header>
 
-<h2>Nodes:</h2>
-<ul>
-  <%= for node <- @nodes do %>
-    <ul><%= IO.inspect(node) %></ul>
-  <% end %>
-</ul>
+<.table id="jobs" rows={@streams.jobs}>
+  <:col :let={{_id, job}} label="ID"><%= job.id %></:col>
+  <:col :let={{_id, job}} label="Expression"><%= Job.expression(job) %></:col>
+  <:col :let={{_id, job}} label="Status"><%= job.status %></:col>
+  <:action :let={{id, job}}>
+    <.link
+      phx-click={JS.push("delete", value: %{id: job.id}) |> hide("##{id}")}
+      data-confirm="Are you sure?"
+    >
+      Delete
+    </.link>
+  </:action>
+</.table>
+
+<.header class="pt-10">Nodes</.header>
+
+<.table id="nodes" rows={@nodes}>
+  <:col :let={node} label="Node"><%= IO.inspect(node) %></:col>
+</.table>
+
+<.modal
+  :if={@live_action in [:new_job, :edit_job]}
+  id="job-modal"
+  show
+  on_cancel={JS.patch(~p"/dashboard")}
+>
+  <.live_component
+    module={WorkerDemoWeb.DashboardLive.JobForm}
+    id={@new_job.id || :new}
+    title={@page_title}
+    action={@live_action}
+    job={@new_job}
+    patch={~p"/dashboard"}
+  />
+</.modal>

@@ -19,7 +19,8 @@ defmodule WorkerDemoWeb.Router do
 
     get "/", PageController, :home
 
-    live "/workers", DashboardLive.Index, :index
+    live "/dashboard", DashboardLive.Index, :index
+    live "/dashboard/new_job", DashboardLive.Index, :new_job
 
     live "/users", UserLive.Index, :index
     live "/users/new", UserLive.Index, :new

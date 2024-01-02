@@ -18,7 +18,7 @@ defmodule WorkerDemo.Application do
       WorkerDemo.HordeRegistry,
       WorkerDemo.HordeSupervisor,
       WorkerDemo.NodeObserver,
-      WorkerDemo.JobQueue.Starter,
+      # WorkerDemo.JobQueue.Starter,
       # Start to serve requests, typically the last entry
       WorkerDemoWeb.Endpoint
     ]

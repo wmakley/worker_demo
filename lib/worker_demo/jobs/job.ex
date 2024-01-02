@@ -51,4 +51,14 @@ defmodule WorkerDemo.Jobs.Job do
     |> validate_inclusion(:op, ["+", "-", "*", "/", "%"])
     |> validate_number(:attempts, greater_than_or_equal_to: 0)
   end
+
+  @spec inspect(__MODULE__) :: String.t()
+  def expression(job) do
+    "#{job.a} #{job.op} #{job.b} = #{job.result || "?"}"
+  end
+
+  @spec inspect(__MODULE__) :: String.t()
+  def inspect(job) do
+    "#{job.id} | #{job.status} | #{job.a} #{job.op} #{job.b} = #{job.result || "?"}"
+  end
 end
