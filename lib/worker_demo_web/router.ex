@@ -21,6 +21,7 @@ defmodule WorkerDemoWeb.Router do
 
     live "/dashboard", DashboardLive.Index, :index
     live "/dashboard/new_job", DashboardLive.Index, :new_job
+    live "/dashboard/edit_job/:id", DashboardLive.Index, :edit_job
 
     live "/users", UserLive.Index, :index
     live "/users/new", UserLive.Index, :new

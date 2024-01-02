@@ -19,12 +19,19 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
   end
 
   defp apply_action(socket, :index, _params) do
-    socket |> assign(:new_job, nil)
+    socket |> assign(:job, nil)
   end
 
   defp apply_action(socket, :new_job, _params) do
     socket
-    |> assign(:new_job, %Job{status: Job.status_new()})
+    |> assign(:page_title, "New Job")
+    |> assign(:job, %Job{status: Job.status_new()})
+  end
+
+  defp apply_action(socket, :edit_job, %{"id" => id}) do
+    socket
+    |> assign(:page_title, "Edit Job")
+    |> assign(:job, Jobs.get_job!(id))
   end
 
   @impl true
@@ -33,7 +40,7 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
   end
 
   @impl true
-  def handle_event("delete", %{"id" => id}, socket) do
+  def handle_event("delete_job", %{"id" => id}, socket) do
     job = Jobs.get_job!(id)
     {:ok, _} = Jobs.delete_job(job)
 
