@@ -7,16 +7,16 @@
   </:actions>
 </.header>
 
-<.table id="jobs" rows={@streams.jobs}>
-  <:col :let={{_id, job}} label="ID"><%= job.id %></:col>
-  <:col :let={{_id, job}} label="Expression"><%= Job.expression(job) %></:col>
-  <:col :let={{_id, job}} label="Status"><%= job.status %></:col>
-  <:action :let={{id, job}}>
+<.table id="jobs" rows={@jobs} row_id={fn job -> "job-#{job.id}" end}>
+  <:col :let={job} label="ID"><%= job.id %></:col>
+  <:col :let={job} label="Expression"><%= Job.expression(job) %></:col>
+  <:col :let={job} label="Status"><%= job.status %></:col>
+  <:action :let={job}>
     <.link patch={~p"/dashboard/edit_job/#{job}"}>Edit</.link>
   </:action>
-  <:action :let={{id, job}}>
+  <:action :let={job}>
     <.link
-      phx-click={JS.push("delete_job", value: %{id: job.id}) |> hide("##{id}")}
+      phx-click={JS.push("delete_job", value: %{id: job.id}) |> hide("#job-#{job.id}")}
       data-confirm="Are you sure?"
     >
       Delete

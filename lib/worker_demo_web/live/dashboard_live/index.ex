@@ -6,11 +6,12 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    :ok = Jobs.subscribe()
+
     {:ok,
      socket
-     |> assign(:page_title, "Workers")
      |> assign(:nodes, node_list())
-     |> stream(:jobs, Jobs.list_jobs())}
+     |> assign(:jobs, Jobs.list_jobs())}
   end
 
   @impl true
@@ -19,7 +20,9 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
   end
 
   defp apply_action(socket, :index, _params) do
-    socket |> assign(:job, nil)
+    socket
+    |> assign(:job, nil)
+    |> assign(:page_title, "Workers")
   end
 
   defp apply_action(socket, :new_job, _params) do
@@ -35,8 +38,22 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
   end
 
   @impl true
-  def handle_info({WorkerDemoWeb.DashboardLive.JobForm, {:saved, job}}, socket) do
-    {:noreply, stream_insert(socket, :jobs, job)}
+  def handle_info({WorkerDemoWeb.DashboardLive.JobForm, {:saved, _job}}, socket) do
+    # {:noreply, stream_insert(socket, :jobs, job)}
+    # ignore, we will get all updates via pubsub
+    {:noreply, socket}
+  end
+
+  def handle_info({:job_insert, job}, socket) do
+    {:noreply, insert_job(socket, job)}
+  end
+
+  def handle_info({:job_update, job}, socket) do
+    {:noreply, update_job(socket, job)}
+  end
+
+  def handle_info({:job_delete, job}, socket) do
+    {:noreply, delete_job(socket, job)}
   end
 
   @impl true
@@ -44,10 +61,39 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
     job = Jobs.get_job!(id)
     {:ok, _} = Jobs.delete_job(job)
 
-    {:noreply, stream_delete(socket, :jobs, job)}
+    {:noreply, socket}
   end
 
   defp node_list() do
     [Node.self() | Node.list()]
+  end
+
+  defp update_job(socket, job) do
+    socket
+    |> assign(
+      :jobs,
+      Enum.map(socket.assigns.jobs, fn j ->
+        if j.id == job.id do
+          job
+        else
+          j
+        end
+      end)
+    )
+  end
+
+  defp insert_job(socket, job) do
+    socket
+    |> assign(:jobs, [job | socket.assigns.jobs])
+  end
+
+  defp delete_job(socket, job) do
+    socket
+    |> assign(
+      :jobs,
+      Enum.filter(socket.assigns.jobs, fn j ->
+        j.id != job.id
+      end)
+    )
   end
 end

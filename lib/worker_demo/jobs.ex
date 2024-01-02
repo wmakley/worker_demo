@@ -11,6 +11,10 @@ defmodule WorkerDemo.Jobs do
 
   alias Phoenix.PubSub
 
+  def subscribe() do
+    PubSub.subscribe(WorkerDemo.PubSub, "jobs")
+  end
+
   @doc """
   Returns the list of jobs.
 
@@ -76,7 +80,7 @@ defmodule WorkerDemo.Jobs do
          |> Job.changeset(attrs)
          |> Repo.insert() do
       {:ok, job} ->
-        PubSub.broadcast(WorkerDemo.PubSub, "jobs:insert", job)
+        :ok = PubSub.broadcast(WorkerDemo.PubSub, "jobs", {:job_insert, job})
         {:ok, job}
 
       {:error, reason} ->
@@ -101,7 +105,7 @@ defmodule WorkerDemo.Jobs do
          |> Job.changeset(attrs)
          |> Repo.update() do
       {:ok, job} ->
-        PubSub.broadcast(WorkerDemo.PubSub, "jobs:update", job)
+        :ok = PubSub.broadcast(WorkerDemo.PubSub, "jobs", {:job_update, job})
         {:ok, job}
 
       {:error, reason} ->
@@ -122,7 +126,14 @@ defmodule WorkerDemo.Jobs do
 
   """
   def delete_job(%Job{} = job) do
-    Repo.delete(job)
+    case Repo.delete(job) do
+      {:ok, job} ->
+        :ok = PubSub.broadcast(WorkerDemo.PubSub, "jobs", {:job_delete, job})
+        {:ok, job}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
