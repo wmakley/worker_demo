@@ -25,7 +25,7 @@ defmodule WorkerDemo.Jobs do
 
   """
   def list_jobs do
-    Repo.all(Job)
+    Repo.all(from j in Job, select: j, order_by: [asc: j.id])
   end
 
   def list_ready_jobs(limit: limit) when is_integer(limit) do

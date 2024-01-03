@@ -3,7 +3,6 @@ defmodule WorkerDemo.Worker do
 
   alias WorkerDemo.Jobs
   alias WorkerDemo.Jobs.Job
-  alias WorkerDemo.JobQueue
 
   alias Phoenix.PubSub
 
@@ -20,13 +19,18 @@ defmodule WorkerDemo.Worker do
     GenServer.call(worker, {:assign, job})
   end
 
+  @impl true
   def init(_) do
     state = %{job: nil, state: :idle}
     Logger.debug("#{__MODULE__} #{inspect(self())} starting with state: #{inspect(state)}")
-    :ok = JobQueue.wait_for_job(self())
+
+    :ok = :pg.join(:workers, self())
+    :ok = :pg.join(:idle_workers, self())
+
     {:ok, broadcast_state(state)}
   end
 
+  @impl true
   def handle_call(:dump_state, _from, state) do
     {:reply, state, state}
   end
@@ -36,62 +40,85 @@ defmodule WorkerDemo.Worker do
   end
 
   def handle_call({:assign, %Job{} = job}, _from, state) do
-    case Jobs.update_job(job, %{
-           status: Job.status_picked_up(),
-           picked_up_by: inspect(self())
-         }) do
-      {:ok, job} ->
-        new_state = %{state | state: :assigned_job, job: job}
-        broadcast_state(new_state)
-        Process.send_after(self(), :perform_job, 3000)
-        {:reply, {:ok, job}, new_state}
+    case state.state do
+      :idle ->
+        case Jobs.update_job(job, %{
+               status: Job.status_picked_up(),
+               picked_up_by: inspect(self())
+             }) do
+          {:ok, job} ->
+            :ok = :pg.leave(:idle_workers, self())
 
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+            new_state = %{state | state: :assigned_job, job: job}
+            broadcast_state(new_state)
+
+            # delay is only for demonstration
+            Process.send_after(self(), :perform_job, 3000)
+
+            {:reply, {:ok, job}, new_state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      _ ->
+        {:reply, {:error, :worker_not_idle}, state}
     end
   end
 
+  @impl true
   def handle_info(:perform_job, state) do
-    new_state = %{state | state: :working} |> broadcast_state()
-    job = Jobs.get_job!(new_state.job.id)
+    try do
+      new_state = %{state | state: :working} |> broadcast_state()
+      job = Jobs.get_job!(new_state.job.id)
 
-    # TODO: any failure should set job to error
+      {:ok, job} =
+        Jobs.update_job(job, %{
+          status: Job.status_in_progress()
+        })
 
-    {:ok, job} =
-      Jobs.update_job(job, %{
-        status: Job.status_in_progress()
-      })
+      Process.sleep(5000)
 
-    Process.sleep(5000)
+      a = job.a
+      b = job.b
 
-    a = job.a
-    b = job.b
+      result =
+        case job.op do
+          "+" ->
+            a + b
 
-    result =
-      case job.op do
-        "+" ->
-          a + b
+          "-" ->
+            a - b
 
-        "-" ->
-          a - b
+          "*" ->
+            a * b
 
-        "*" ->
-          a * b
+          "/" ->
+            a / b
+        end
 
-        "/" ->
-          a / b
-      end
+      {:ok, _} =
+        Jobs.update_job(job, %{
+          status: Job.status_complete(),
+          result: result
+        })
 
-    {:ok, _} =
-      Jobs.update_job(job, %{
-        status: Job.status_complete(),
-        result: result
-      })
+      new_state = %{new_state | job: nil, state: :idle}
+      :pg.join(:idle_workers, self())
 
-    new_state = %{new_state | job: nil, state: :idle}
-    :ok = JobQueue.wait_for_job(self())
+      {:noreply, broadcast_state(new_state)}
+    rescue
+      e ->
+        {:ok, _} =
+          Jobs.update_job(state.job, %{
+            status: Job.status_error(),
+            status_details: inspect(e),
+            picked_up_by: nil
+          })
 
-    {:noreply, broadcast_state(new_state)}
+        # now crash
+        raise e
+    end
   end
 
   def broadcast_state(state) do

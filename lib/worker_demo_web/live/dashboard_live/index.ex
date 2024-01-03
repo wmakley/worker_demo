@@ -66,10 +66,43 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
   end
 
   def handle_info({:worker, pid, :terminated}, socket) do
-    {:noreply, socket |> stream_delete(:workers, inspect(pid))}
+    {:noreply,
+     socket
+     |> stream_delete(:workers, %{id: inspect(pid)})
+     |> put_flash(:error, "Worker #{inspect(pid)} crashed!")}
   end
 
   @impl true
+  def handle_event("reset_job", %{"id" => id}, socket) do
+    job = Jobs.get_job!(id)
+
+    {:ok, _} =
+      Jobs.update_job(job, %{
+        result: nil,
+        status: Job.status_ready(),
+        status_details: nil,
+        picked_up_by: nil
+      })
+
+    {:noreply, socket}
+  end
+
+  def handle_event("reset_all", _params, socket) do
+    :ok =
+      Jobs.list_jobs()
+      |> Enum.each(fn job ->
+        {:ok, _} =
+          Jobs.update_job(job, %{
+            result: nil,
+            status: Job.status_ready(),
+            status_details: nil,
+            picked_up_by: nil
+          })
+      end)
+
+    {:noreply, socket}
+  end
+
   def handle_event("delete_job", %{"id" => id}, socket) do
     job = Jobs.get_job!(id)
     {:ok, _} = Jobs.delete_job(job)

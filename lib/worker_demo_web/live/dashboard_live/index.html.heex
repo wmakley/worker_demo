@@ -1,6 +1,9 @@
 <.header>
   Jobs
   <:actions>
+    <.link phx-click="reset_all">
+      <.button>Reset All Jobs</.button>
+    </.link>
     <.link patch={~p"/dashboard/new_job"}>
       <.button>New Job</.button>
     </.link>
@@ -11,8 +14,14 @@
   <:col :let={job} label="ID"><%= job.id %></:col>
   <:col :let={job} label="Expression"><%= Job.expression(job) %></:col>
   <:col :let={job} label="Status"><%= job.status %></:col>
+  <:col :let={job} label="Details"><%= job.status_details %></:col>
   <:action :let={job}>
     <.link patch={~p"/dashboard/edit_job/#{job}"}>Edit</.link>
+  </:action>
+  <:action :let={job}>
+    <.link phx-click={JS.push("reset_job", value: %{id: job.id})}>
+      Reset
+    </.link>
   </:action>
   <:action :let={job}>
     <.link
@@ -30,12 +39,19 @@
   <:col :let={{_dom_id, worker}} label="PID"><%= inspect(worker.pid) %></:col>
   <:col :let={{_dom_id, worker}} label="State"><%= inspect(worker.state) %></:col>
   <:col :let={{_dom_id, worker}} label="Job ID"><%= job_id(worker) || "N/A" %></:col>
+  <:col :let={{_dom_id, worker}} label="Details">
+    <%= if worker.job do %>
+      <%= Job.expression(worker.job) %>
+    <% else %>
+      N/A
+    <% end %>
+  </:col>
 </.table>
 
 <.header class="pt-10">Nodes</.header>
 
 <.table id="nodes" rows={@nodes}>
-  <:col :let={node} label="Node"><%= IO.inspect(node) %></:col>
+  <:col :let={node} label="Node"><%= inspect(node) %></:col>
 </.table>
 
 <.modal

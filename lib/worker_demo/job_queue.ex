@@ -34,9 +34,9 @@ defmodule WorkerDemo.JobQueue do
   Add yourself to the list of workers waiting for work, where "worker" can be
   a pid or via tuple. Via tuple is necessary for distributed registry to work.
   """
-  @spec wait_for_job(Worker.worker()) :: :ok | {:error, term()}
-  def wait_for_job(worker) do
-    GenServer.call({:global, __MODULE__}, {:wait_for_job, worker})
+  @spec enqueue_worker(Worker.worker()) :: :ok | {:error, term()}
+  def enqueue_worker(worker) do
+    GenServer.call({:global, __MODULE__}, {:enqueue_worker, worker})
   end
 
   def init(opts) do
@@ -44,75 +44,59 @@ defmodule WorkerDemo.JobQueue do
 
     scan_interval = Keyword.get(opts, :scan_interval, 5000)
 
-    idle_workers = WorkerPool.idle_workers()
-    Logger.debug("#{__MODULE__} enqueuing #{length(idle_workers)} idle workers")
-
-    queue =
-      idle_workers
-      |> Enum.reduce(:queue.new(), fn worker, queue ->
-        :queue.in(worker, queue)
-      end)
-
-    # start scanning jobs table every 5 seconds
-    Logger.info("starting job scan every #{scan_interval}ms")
+    Logger.info("#{__MODULE__} starting worker and job scan every #{scan_interval}ms")
     broadcast({:job_queue, :started})
 
-    Process.send_after(self(), :scan_for_ready_jobs, scan_interval)
-    # workers will ask for work as they come online
-    {:ok, %{worker_queue: queue, scan_interval: scan_interval}}
+    timer = Process.send_after(self(), :scan, scan_interval)
+
+    {:ok, %{scan_interval: scan_interval, timer: timer}}
   end
 
-  def handle_call({:wait_for_job, worker}, _, state) do
-    Logger.debug("#{__MODULE__} adding worker to queue: #{inspect(worker)}")
+  # Internal function run every interval ms
+  def handle_info(:scan, state) do
+    broadcast({:job_queue, :scanning})
+    Logger.debug("#{__MODULE__} scanning for workers and jobs...")
 
-    queue = state.worker_queue
+    filled_queue = enqueue_idle_workers(:queue.new())
+    Logger.debug("#{__MODULE__} filled worker queue: #{inspect(filled_queue)}")
 
-    state =
-      if :queue.member(worker, queue) do
-        state
-      else
-        %{
+    new_state =
+      case :queue.peek(filled_queue) do
+        :empty ->
+          Logger.debug("#{__MODULE__} no workers in queue")
           state
-          | worker_queue: :queue.in(worker, state.worker_queue)
-        }
+
+        {:value, _} ->
+          # not bothering with transaction since all status changes from
+          # ready -> something else must go through this process
+          ready_jobs = Jobs.list_ready_jobs(limit: 100)
+
+          # for every ready job, try to dequeue a worker pid and assign it to a worker:
+          broadcast({:job_queue, :dispatching})
+          dispatch_jobs(ready_jobs, filled_queue)
+
+          broadcast({:job_queue, :idle})
+          state
       end
 
-    {:reply, :ok, state}
+    timer = Process.send_after(self(), :scan, state.scan_interval)
+    {:noreply, %{new_state | timer: timer}}
   end
 
-  # Internal function run every 5 seconds
-  def handle_info(:scan_for_ready_jobs, state) do
-    broadcast({:job_queue, :scanning})
-    Logger.debug("#{__MODULE__} scanning for ready jobs...")
-    Process.sleep(3000)
+  defp enqueue_idle_workers(queue) do
+    idle_workers = WorkerPool.idle_workers()
+    Logger.debug("#{__MODULE__} enqueuing idle workers: #{inspect(idle_workers)}")
 
-    queue = state.worker_queue
-
-    case :queue.len(queue) do
-      0 ->
-        Logger.debug("#{__MODULE__} no workers in queue")
-        {:noreply, state}
-
-      num ->
-        # not bothering with transaction since all status changes from
-        # ready -> something else must go through this process
-        ready_jobs = Jobs.list_ready_jobs(limit: num)
-
-        # for every ready job, try to dequeue a worker pid and assign it to a worker:
-        broadcast({:job_queue, :dispatching})
-        Process.sleep(3000)
-        queue = dispatch_jobs(ready_jobs, queue)
-
-        broadcast({:job_queue, :idle})
-        Process.send_after(self(), :scan_for_ready_jobs, state.scan_interval)
-        {:noreply, %{state | worker_queue: queue}}
-    end
+    idle_workers
+    |> Enum.reduce(queue, fn worker, queue ->
+      :queue.in(worker, queue)
+    end)
   end
 
   defp dispatch_jobs([job | rest], queue) do
     case :queue.out(queue) do
       {{:value, worker}, q2} ->
-        Logger.debug(
+        Logger.info(
           "#{__MODULE__} attempting to assign Job ID #{job.id} to Worker #{inspect(worker)}"
         )
 
@@ -128,6 +112,8 @@ defmodule WorkerDemo.JobQueue do
             {:ok, _} =
               Jobs.update_job(job, %{
                 status: Job.status_error(),
+                status_details: inspect(reason),
+                picked_up_by: nil,
                 attempts: job.attempts + 1
               })
         end

@@ -46,23 +46,26 @@ defmodule WorkerDemo.WorkerPool do
     end)
   end
 
+  @doc """
+  Returns global list of idle workers
+  """
   @spec idle_workers() :: [pid()]
   def idle_workers() do
-    :pg.get_members(:workers)
-    |> Enum.map(fn worker ->
-      {worker,
-       Task.async(fn ->
-         GenServer.call(worker, :is_idle?)
-       end)}
-    end)
-    |> Enum.map(fn {worker, task} ->
-      if Task.await(task) do
-        worker
-      else
-        nil
-      end
-    end)
-    |> Enum.filter(& &1)
+    :pg.get_members(:idle_workers)
+    # |> Enum.map(fn worker ->
+    #   {worker,
+    #    Task.async(fn ->
+    #      GenServer.call(worker, :is_idle?)
+    #    end)}
+    # end)
+    # |> Enum.map(fn {worker, task} ->
+    #   if Task.await(task) do
+    #     worker
+    #   else
+    #     nil
+    #   end
+    # end)
+    # |> Enum.filter(& &1)
   end
 
   def subscribe_to_worker_states() do
@@ -76,12 +79,15 @@ defmodule WorkerDemo.WorkerPool do
 
   @impl true
   def handle_call(:start_worker, _from, state) do
-    {:ok, child} = DynamicSupervisor.start_child(WorkerPoolSupervisor, Worker)
-    Process.monitor(child)
+    case DynamicSupervisor.start_child(WorkerPoolSupervisor, Worker) do
+      {:ok, child} ->
+        Process.monitor(child)
 
-    :ok = :pg.join(:workers, child)
+        {:reply, {:ok, child}, state}
 
-    {:reply, {:ok, child}, state}
+      {:error, reason} ->
+        Logger.error("#{__MODULE__} error starting worker: #{inspect(reason)}")
+    end
   end
 
   @impl true
