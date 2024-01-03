@@ -19,6 +19,7 @@ defmodule WorkerDemo.JobQueue do
 
   require Logger
 
+  @spec start_link([scan_interval: integer()], GenServer.options()) :: GenServer.on_start()
   def start_link(init_arg, opts \\ []) do
     GenServer.start_link(__MODULE__, init_arg, opts)
   end
@@ -31,13 +32,15 @@ defmodule WorkerDemo.JobQueue do
   Add yourself to the list of workers waiting for work, where "worker" can be
   a pid or via tuple. Via tuple is necessary for distributed registry to work.
   """
-  @spec wait_for_job(job_queue(), Worker.worker()) :: :ok | {:error, term()}
-  def wait_for_job(queue, worker) do
-    GenServer.call(queue, {:wait_for_job, worker})
+  @spec wait_for_job(Worker.worker()) :: :ok | {:error, term()}
+  def wait_for_job(worker) do
+    GenServer.call({:global, __MODULE__}, {:wait_for_job, worker})
   end
 
-  def init(_) do
-    scan_interval = 5000
+  def init(opts) do
+    Logger.debug("#{__MODULE__} starting with opts: #{inspect(opts)}")
+
+    scan_interval = Keyword.get(opts, :scan_interval, 5000)
     # start scanning jobs table every 5 seconds
     Logger.info("starting job scan every #{scan_interval}ms")
     broadcast({:job_queue, :started})
@@ -47,6 +50,8 @@ defmodule WorkerDemo.JobQueue do
   end
 
   def handle_call({:wait_for_job, worker}, _, state) do
+    Logger.debug("#{__MODULE__} adding worker to queue: #{inspect(worker)}")
+
     queue = state.worker_queue
 
     state =
@@ -65,7 +70,7 @@ defmodule WorkerDemo.JobQueue do
   # Internal function run every 5 seconds
   def handle_info(:scan_for_ready_jobs, state) do
     broadcast({:job_queue, :scanning})
-    Logger.debug("scanning for ready jobs...")
+    Logger.debug("#{__MODULE__} scanning for ready jobs...")
     Process.sleep(3000)
 
     queue = state.worker_queue
@@ -87,6 +92,7 @@ defmodule WorkerDemo.JobQueue do
   defp dispatch_jobs([job | rest], queue) do
     case :queue.out(queue) do
       {{:value, worker}, q2} ->
+        Logger.debug("#{__MODULE__} attempting to assign Job #{job} to #{inspect(worker)}")
         :ok = Jobs.assign(job, worker)
 
         # TODO: error handling if worker is not running or assignment fails: assign job to next worker or reset status

@@ -3,13 +3,16 @@ defmodule WorkerDemo.Worker do
 
   alias WorkerDemo.Jobs
   alias WorkerDemo.Jobs.Job
+  alias WorkerDemo.JobQueue
 
   alias Phoenix.PubSub
 
+  require Logger
+
   @type worker() :: GenServer.server()
 
-  def start_link(id, options \\ []) do
-    GenServer.start_link(__MODULE__, id, options)
+  def start_link(options \\ []) do
+    GenServer.start_link(__MODULE__, nil, options)
   end
 
   @spec assign(worker(), %Job{}, delay: integer()) :: :ok | {:error, String.t()}
@@ -17,8 +20,10 @@ defmodule WorkerDemo.Worker do
     GenServer.call(worker, {:assign, job, delay})
   end
 
-  def init(id) do
-    state = %{id: id, job: nil, state: :idle}
+  def init(_) do
+    state = %{job: nil, state: :idle}
+    Logger.debug("#{__MODULE__} #{inspect(self())} starting with state: #{inspect(state)}")
+    :ok = JobQueue.wait_for_job(self())
     {:ok, broadcast_state(state)}
   end
 
@@ -73,6 +78,7 @@ defmodule WorkerDemo.Worker do
       })
 
     new_state = %{new_state | job: nil, state: :idle}
+    :ok = JobQueue.wait_for_job(self())
 
     {:noreply, broadcast_state(new_state)}
   end

@@ -15,10 +15,12 @@ defmodule WorkerDemo.Application do
       # Start the Finch HTTP client for sending emails
       {Finch, name: WorkerDemo.Finch},
       # Custom distributed worker stuff:
-      WorkerDemo.HordeRegistry,
-      WorkerDemo.HordeSupervisor,
-      WorkerDemo.NodeObserver,
-      # WorkerDemo.JobQueue.Starter,
+      # WorkerDemo.HordeRegistry,
+      # WorkerDemo.HordeSupervisor,
+      # WorkerDemo.NodeObserver,
+      {WorkerDemo.JobQueue.Starter, scan_interval: 5000},
+      {DynamicSupervisor, name: WorkerDemo.WorkerPoolSupervisor, strategy: :one_for_one},
+      {WorkerDemo.WorkerPool, size: 2},
       # Start to serve requests, typically the last entry
       WorkerDemoWeb.Endpoint
     ]

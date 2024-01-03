@@ -1,43 +1,38 @@
 defmodule WorkerDemo.JobQueue.Starter do
+  use GenServer
+
   require Logger
 
-  alias WorkerDemo.{JobQueue, HordeRegistry, HordeSupervisor}
+  alias WorkerDemo.JobQueue
 
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      type: :worker,
-      restart: :temporary,
-      shutdown: 500
-    }
+  def start_link(job_queue_opts \\ []) do
+    GenServer.start_link(__MODULE__, job_queue_opts, name: __MODULE__)
   end
 
-  def start_link(opts) do
-    name =
-      opts
-      |> Keyword.get(:name, JobQueue)
-      |> via_tuple()
+  @impl true
+  def init(job_queue_opts) do
+    pid = start_and_monitor(job_queue_opts)
 
-    new_opts = Keyword.put(opts, :name, name)
-
-    child_spec = %{
-      id: JobQueue,
-      start: {JobQueue, :start_link, [new_opts]}
-    }
-
-    HordeSupervisor.start_child(child_spec)
-
-    :ignore
+    {:ok, {pid, job_queue_opts}}
   end
 
-  def whereis(name \\ JobQueue) do
-    name
-    |> via_tuple()
-    |> GenServer.whereis()
+  @impl true
+  def handle_info({:DOWN, _, :process, pid, _reason}, {pid, job_queue_opts} = _state) do
+    {:noreply, {start_and_monitor(job_queue_opts), job_queue_opts}}
   end
 
-  defp via_tuple(name) do
-    {:via, HordeRegistry, {HordeRegistry, name}}
+  defp start_and_monitor(job_queue_opts) do
+    pid =
+      case JobQueue.start_link(job_queue_opts, name: {:global, JobQueue}) do
+        {:ok, pid} ->
+          pid
+
+        {:error, {:already_started, pid}} ->
+          pid
+      end
+
+    Process.monitor(pid)
+
+    pid
   end
 end
