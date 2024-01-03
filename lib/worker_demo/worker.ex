@@ -18,7 +18,8 @@ defmodule WorkerDemo.Worker do
   end
 
   def init(id) do
-    {:ok, %{id: id, job: nil, state: :idle}}
+    state = %{id: id, job: nil, state: :idle}
+    {:ok, broadcast_state(state)}
   end
 
   def handle_call({:assign, %Job{} = job, delay}, _from, state) do
@@ -77,7 +78,7 @@ defmodule WorkerDemo.Worker do
   end
 
   defp broadcast_state(state) do
-    :ok = PubSub.broadcast(WorkerDemo.PubSub, "worker_state", {Node.self(), state})
+    :ok = PubSub.broadcast(WorkerDemo.PubSub, "workers", {:worker, Node.self(), self(), state})
     state
   end
 end

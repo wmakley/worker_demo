@@ -10,6 +10,8 @@ defmodule WorkerDemo.JobQueue do
   """
   use GenServer
 
+  alias Phoenix.PubSub
+
   alias WorkerDemo.Jobs
   alias WorkerDemo.Worker
 
@@ -19,6 +21,10 @@ defmodule WorkerDemo.JobQueue do
 
   def start_link(init_arg, opts \\ []) do
     GenServer.start_link(__MODULE__, init_arg, opts)
+  end
+
+  def subscribe() do
+    PubSub.subscribe(WorkerDemo.PubSub, "job_queue")
   end
 
   @doc """
@@ -34,6 +40,7 @@ defmodule WorkerDemo.JobQueue do
     scan_interval = 5000
     # start scanning jobs table every 5 seconds
     Logger.info("starting job scan every #{scan_interval}ms")
+    broadcast({:job_queue, :started})
     Process.send_after(self(), :scan_for_ready_jobs, scan_interval)
     # workers will ask for work as they come online
     {:ok, %{worker_queue: :queue.new(), scan_interval: scan_interval}}
@@ -57,7 +64,10 @@ defmodule WorkerDemo.JobQueue do
 
   # Internal function run every 5 seconds
   def handle_info(:scan_for_ready_jobs, state) do
+    broadcast({:job_queue, :scanning})
     Logger.debug("scanning for ready jobs...")
+    Process.sleep(3000)
+
     queue = state.worker_queue
 
     # not bothering with transaction since all status changes from
@@ -65,8 +75,11 @@ defmodule WorkerDemo.JobQueue do
     ready_jobs = Jobs.list_ready_jobs(limit: :queue.len(queue))
 
     # for every ready job, try to dequeue a worker pid and assign it to a worker:
+    broadcast({:job_queue, :dispatching})
+    Process.sleep(3000)
     queue = dispatch_jobs(ready_jobs, queue)
 
+    broadcast({:job_queue, :idle})
     Process.send_after(self(), :scan_for_ready_jobs, state.scan_interval)
     {:noreply, %{state | worker_queue: queue}}
   end
@@ -87,5 +100,9 @@ defmodule WorkerDemo.JobQueue do
 
   defp dispatch_jobs([], queue) do
     queue
+  end
+
+  defp broadcast(msg) do
+    :ok = PubSub.broadcast(WorkerDemo.PubSub, "job_queue", msg)
   end
 end
