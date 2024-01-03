@@ -121,7 +121,7 @@ defmodule WorkerDemo.Worker do
     end
   end
 
-  def broadcast_state(state) do
+  defp broadcast_state(state) do
     :ok = PubSub.broadcast(WorkerDemo.PubSub, "workers", {:worker, self(), state})
     state
   end

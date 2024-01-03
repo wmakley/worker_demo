@@ -52,20 +52,6 @@ defmodule WorkerDemo.WorkerPool do
   @spec idle_workers() :: [pid()]
   def idle_workers() do
     :pg.get_members(:idle_workers)
-    # |> Enum.map(fn worker ->
-    #   {worker,
-    #    Task.async(fn ->
-    #      GenServer.call(worker, :is_idle?)
-    #    end)}
-    # end)
-    # |> Enum.map(fn {worker, task} ->
-    #   if Task.await(task) do
-    #     worker
-    #   else
-    #     nil
-    #   end
-    # end)
-    # |> Enum.filter(& &1)
   end
 
   def subscribe_to_worker_states() do

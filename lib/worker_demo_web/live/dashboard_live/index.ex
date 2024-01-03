@@ -68,7 +68,7 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
   def handle_info({:worker, pid, :terminated}, socket) do
     {:noreply,
      socket
-     |> stream_delete(:workers, %{id: inspect(pid)})
+     |> update_worker(pid, %{state: :terminated, job: nil})
      |> put_flash(:error, "Worker #{inspect(pid)} crashed!")}
   end
 
@@ -150,12 +150,21 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
     )
   end
 
-  defp update_worker(socket, pid, worker_state) do
-    socket
-    |> stream_insert(
-      :workers,
-      to_stream_item(pid, worker_state)
-    )
+  defp update_worker(socket, pid, %{} = worker_state) when is_pid(pid) do
+    item = to_stream_item(pid, worker_state)
+    Logger.debug("Updating worker state: #{inspect(item)}")
+
+    case worker_state.state do
+      # move them to the bottom if they're dead:
+      :terminated ->
+        socket
+        |> stream_delete(:workers, item)
+        |> stream_insert(:workers, item, at: -1)
+
+      _ ->
+        socket
+        |> stream_insert(:workers, item, at: 0)
+    end
   end
 
   # convert a worker pid and state to stream item for display, using pid as id
