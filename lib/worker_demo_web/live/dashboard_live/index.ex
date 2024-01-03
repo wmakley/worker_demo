@@ -3,15 +3,20 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
 
   alias WorkerDemo.Jobs
   alias WorkerDemo.Jobs.Job
+  alias WorkerDemo.WorkerPool
+
+  require Logger
 
   @impl true
   def mount(_params, _session, socket) do
     :ok = Jobs.subscribe()
+    :ok = WorkerPool.subscribe_to_worker_states()
 
     {:ok,
      socket
      |> assign(:nodes, node_list())
-     |> assign(:jobs, Jobs.list_jobs())}
+     |> assign(:jobs, Jobs.list_jobs())
+     |> stream(:workers, list_workers())}
   end
 
   @impl true
@@ -56,12 +61,27 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
     {:noreply, delete_job(socket, job)}
   end
 
+  def handle_info({:worker, pid, %{} = new_state}, socket) do
+    {:noreply, update_worker(socket, pid, new_state)}
+  end
+
+  def handle_info({:worker, pid, :terminated}, socket) do
+    {:noreply, socket |> stream_delete(:workers, inspect(pid))}
+  end
+
   @impl true
   def handle_event("delete_job", %{"id" => id}, socket) do
     job = Jobs.get_job!(id)
     {:ok, _} = Jobs.delete_job(job)
 
     {:noreply, socket}
+  end
+
+  defp list_workers() do
+    WorkerPool.get_all_worker_states()
+    |> Enum.map(fn {pid, state} ->
+      to_stream_item(pid, state)
+    end)
   end
 
   defp node_list() do
@@ -95,5 +115,20 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
         j.id != job.id
       end)
     )
+  end
+
+  defp update_worker(socket, pid, worker_state) do
+    socket
+    |> stream_insert(
+      :workers,
+      to_stream_item(pid, worker_state)
+    )
+  end
+
+  # convert a worker pid and state to stream item for display, using pid as id
+  defp to_stream_item(pid, worker_state) when is_pid(pid) do
+    worker_state
+    |> Map.put(:id, inspect(pid))
+    |> Map.put(:pid, pid)
   end
 end

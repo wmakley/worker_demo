@@ -15,9 +15,9 @@ defmodule WorkerDemo.Worker do
     GenServer.start_link(__MODULE__, nil, options)
   end
 
-  @spec assign(worker(), %Job{}, delay: integer()) :: :ok | {:error, String.t()}
-  def assign(worker, %Job{} = job, delay: delay) when is_integer(delay) do
-    GenServer.call(worker, {:assign, job, delay})
+  @spec assign(worker(), %Job{}) :: :ok | {:error, String.t()}
+  def assign(worker, %Job{} = job) do
+    GenServer.call(worker, {:assign, job})
   end
 
   def init(_) do
@@ -27,7 +27,15 @@ defmodule WorkerDemo.Worker do
     {:ok, broadcast_state(state)}
   end
 
-  def handle_call({:assign, %Job{} = job, delay}, _from, state) do
+  def handle_call(:dump_state, _from, state) do
+    {:reply, state, state}
+  end
+
+  def handle_call(:is_idle?, _from, state) do
+    {:reply, state.state == :idle, state}
+  end
+
+  def handle_call({:assign, %Job{} = job}, _from, state) do
     {:ok, job} =
       Jobs.update_job(job, %{
         status: Job.status_picked_up(),
@@ -36,7 +44,7 @@ defmodule WorkerDemo.Worker do
 
     new_state = %{state | state: :assigned_job, job: job}
     broadcast_state(new_state)
-    Process.send_after(self(), :perform_job, delay)
+    Process.sleep(3000)
     {:reply, :ok, new_state}
   end
 
@@ -83,8 +91,8 @@ defmodule WorkerDemo.Worker do
     {:noreply, broadcast_state(new_state)}
   end
 
-  defp broadcast_state(state) do
-    :ok = PubSub.broadcast(WorkerDemo.PubSub, "workers", {:worker, Node.self(), self(), state})
+  def broadcast_state(state) do
+    :ok = PubSub.broadcast(WorkerDemo.PubSub, "workers", {:worker, self(), state})
     state
   end
 end

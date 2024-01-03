@@ -24,6 +24,14 @@
   </:action>
 </.table>
 
+<.header class="pt-10">Workers</.header>
+
+<.table id="workers" rows={@streams.workers}>
+  <:col :let={{_dom_id, worker}} label="PID"><%= inspect(worker.pid) %></:col>
+  <:col :let={{_dom_id, worker}} label="State"><%= inspect(worker.state) %></:col>
+  <:col :let={{_dom_id, worker}} label="Job ID"><%= inspect(get_in(worker, [:job, :id])) %></:col>
+</.table>
+
 <.header class="pt-10">Nodes</.header>
 
 <.table id="nodes" rows={@nodes}>

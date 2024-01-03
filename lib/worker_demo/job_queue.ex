@@ -14,6 +14,7 @@ defmodule WorkerDemo.JobQueue do
 
   alias WorkerDemo.Jobs
   alias WorkerDemo.Worker
+  alias WorkerDemo.WorkerPool
 
   @type job_queue() :: GenServer.server()
 
@@ -41,12 +42,23 @@ defmodule WorkerDemo.JobQueue do
     Logger.debug("#{__MODULE__} starting with opts: #{inspect(opts)}")
 
     scan_interval = Keyword.get(opts, :scan_interval, 5000)
+
+    idle_workers = WorkerPool.idle_workers()
+    Logger.debug("#{__MODULE__} enqueuing #{length(idle_workers)} idle workers")
+
+    queue =
+      idle_workers
+      |> Enum.reduce(:queue.new(), fn worker, queue ->
+        :queue.in(worker, queue)
+      end)
+
     # start scanning jobs table every 5 seconds
     Logger.info("starting job scan every #{scan_interval}ms")
     broadcast({:job_queue, :started})
+
     Process.send_after(self(), :scan_for_ready_jobs, scan_interval)
     # workers will ask for work as they come online
-    {:ok, %{worker_queue: :queue.new(), scan_interval: scan_interval}}
+    {:ok, %{worker_queue: queue, scan_interval: scan_interval}}
   end
 
   def handle_call({:wait_for_job, worker}, _, state) do
@@ -75,24 +87,34 @@ defmodule WorkerDemo.JobQueue do
 
     queue = state.worker_queue
 
-    # not bothering with transaction since all status changes from
-    # ready -> something else must go through this process
-    ready_jobs = Jobs.list_ready_jobs(limit: :queue.len(queue))
+    case :queue.len(queue) do
+      0 ->
+        Logger.debug("#{__MODULE__} no workers in queue")
+        {:noreply, state}
 
-    # for every ready job, try to dequeue a worker pid and assign it to a worker:
-    broadcast({:job_queue, :dispatching})
-    Process.sleep(3000)
-    queue = dispatch_jobs(ready_jobs, queue)
+      num ->
+        # not bothering with transaction since all status changes from
+        # ready -> something else must go through this process
+        ready_jobs = Jobs.list_ready_jobs(limit: num)
 
-    broadcast({:job_queue, :idle})
-    Process.send_after(self(), :scan_for_ready_jobs, state.scan_interval)
-    {:noreply, %{state | worker_queue: queue}}
+        # for every ready job, try to dequeue a worker pid and assign it to a worker:
+        broadcast({:job_queue, :dispatching})
+        Process.sleep(3000)
+        queue = dispatch_jobs(ready_jobs, queue)
+
+        broadcast({:job_queue, :idle})
+        Process.send_after(self(), :scan_for_ready_jobs, state.scan_interval)
+        {:noreply, %{state | worker_queue: queue}}
+    end
   end
 
   defp dispatch_jobs([job | rest], queue) do
     case :queue.out(queue) do
       {{:value, worker}, q2} ->
-        Logger.debug("#{__MODULE__} attempting to assign Job #{job} to #{inspect(worker)}")
+        Logger.debug(
+          "#{__MODULE__} attempting to assign Job ID #{job.id} to Worker #{inspect(worker)}"
+        )
+
         :ok = Jobs.assign(job, worker)
 
         # TODO: error handling if worker is not running or assignment fails: assign job to next worker or reset status

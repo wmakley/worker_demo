@@ -39,9 +39,9 @@ defmodule WorkerDemo.Jobs do
     Repo.all(query)
   end
 
-  @spec assign(%Job{}, to: Worker.worker()) :: :ok | {:error, term()}
-  def assign(job, to: worker) do
-    case Worker.assign(worker, job, delay: 5000) do
+  @spec assign(%Job{}, Worker.worker()) :: :ok | {:error, term()}
+  def assign(job, worker) do
+    case Worker.assign(worker, job) do
       :ok ->
         :ok
     end
