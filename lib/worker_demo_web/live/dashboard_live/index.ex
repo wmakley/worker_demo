@@ -131,4 +131,14 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
     |> Map.put(:id, inspect(pid))
     |> Map.put(:pid, pid)
   end
+
+  defp job_id(worker_state) do
+    case worker_state.job do
+      nil ->
+        nil
+
+      %{id: id} ->
+        id
+    end
+  end
 end

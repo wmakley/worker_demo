@@ -15,7 +15,7 @@ defmodule WorkerDemo.Worker do
     GenServer.start_link(__MODULE__, nil, options)
   end
 
-  @spec assign(worker(), %Job{}) :: :ok | {:error, String.t()}
+  @spec assign(worker(), %Job{}) :: {:ok, %Job{}} | {:error, String.t()}
   def assign(worker, %Job{} = job) do
     GenServer.call(worker, {:assign, job})
   end
@@ -36,16 +36,19 @@ defmodule WorkerDemo.Worker do
   end
 
   def handle_call({:assign, %Job{} = job}, _from, state) do
-    {:ok, job} =
-      Jobs.update_job(job, %{
-        status: Job.status_picked_up(),
-        picked_up_by: self()
-      })
+    case Jobs.update_job(job, %{
+           status: Job.status_picked_up(),
+           picked_up_by: inspect(self())
+         }) do
+      {:ok, job} ->
+        new_state = %{state | state: :assigned_job, job: job}
+        broadcast_state(new_state)
+        Process.send_after(self(), :perform_job, 3000)
+        {:reply, {:ok, job}, new_state}
 
-    new_state = %{state | state: :assigned_job, job: job}
-    broadcast_state(new_state)
-    Process.sleep(3000)
-    {:reply, :ok, new_state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_info(:perform_job, state) do

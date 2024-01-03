@@ -7,7 +7,7 @@ defmodule WorkerDemo.Jobs do
   alias WorkerDemo.Repo
 
   alias WorkerDemo.Jobs.Job
-  alias WorkerDemo.Worker
+  # alias WorkerDemo.Worker
 
   alias Phoenix.PubSub
 
@@ -37,14 +37,6 @@ defmodule WorkerDemo.Jobs do
         limit: ^limit
 
     Repo.all(query)
-  end
-
-  @spec assign(%Job{}, Worker.worker()) :: :ok | {:error, term()}
-  def assign(job, worker) do
-    case Worker.assign(worker, job) do
-      :ok ->
-        :ok
-    end
   end
 
   @doc """

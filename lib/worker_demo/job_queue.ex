@@ -13,6 +13,7 @@ defmodule WorkerDemo.JobQueue do
   alias Phoenix.PubSub
 
   alias WorkerDemo.Jobs
+  alias WorkerDemo.Jobs.Job
   alias WorkerDemo.Worker
   alias WorkerDemo.WorkerPool
 
@@ -115,9 +116,21 @@ defmodule WorkerDemo.JobQueue do
           "#{__MODULE__} attempting to assign Job ID #{job.id} to Worker #{inspect(worker)}"
         )
 
-        :ok = Jobs.assign(job, worker)
+        case Worker.assign(worker, job) do
+          {:ok, _} ->
+            :ignore
 
-        # TODO: error handling if worker is not running or assignment fails: assign job to next worker or reset status
+          {:error, reason} ->
+            Logger.error(
+              "#{__MODULE__} error assigning #{inspect(job)} to Worker #{inspect(worker)}: #{inspect(reason)}"
+            )
+
+            {:ok, _} =
+              Jobs.update_job(job, %{
+                status: Job.status_error(),
+                attempts: job.attempts + 1
+              })
+        end
 
         dispatch_jobs(rest, q2)
 
