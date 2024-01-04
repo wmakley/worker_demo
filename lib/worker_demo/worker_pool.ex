@@ -104,7 +104,7 @@ defmodule WorkerDemo.WorkerPool do
   end
 
   @impl true
-  def handle_cast({:worker_started, pid}, state) do
+  def handle_cast({:worker_started, pid}, state) when is_pid(pid) do
     Logger.debug("#{__MODULE__} monitoring worker: #{inspect(pid)}")
     Process.monitor(pid)
     {:noreply, state}

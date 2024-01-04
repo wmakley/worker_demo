@@ -7,10 +7,13 @@ defmodule WorkerDemo.Application do
 
   @impl true
   def start(_type, _args) do
+    topologies = Application.get_env(:libcluster, :topologies) || []
+
     children = [
       WorkerDemoWeb.Telemetry,
       WorkerDemo.Repo,
-      {DNSCluster, query: Application.get_env(:worker_demo, :dns_cluster_query) || :ignore},
+      # {DNSCluster, query: Application.get_env(:worker_demo, :dns_cluster_query) || :ignore},
+      {Cluster.Supervisor, [topologies, [name: WorkerDemo.ClusterSupervisor]]},
       {Phoenix.PubSub, name: WorkerDemo.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: WorkerDemo.Finch},

@@ -58,7 +58,7 @@ defmodule WorkerDemo.JobQueue do
     Logger.debug("#{__MODULE__} scanning for workers and jobs...")
 
     filled_queue = enqueue_idle_workers(:queue.new())
-    Logger.debug("#{__MODULE__} filled worker queue: #{inspect(filled_queue)}")
+    # Logger.debug("#{__MODULE__} filled worker queue: #{inspect(filled_queue)}")
 
     new_state =
       case :queue.peek(filled_queue) do

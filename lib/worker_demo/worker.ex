@@ -55,6 +55,7 @@ defmodule WorkerDemo.Worker do
       :idle ->
         case Jobs.update_job(job, %{
                status: Job.status_picked_up(),
+               status_details: "picked up by #{inspect(self())}",
                picked_up_by: inspect(self())
              }) do
           {:ok, job} ->
