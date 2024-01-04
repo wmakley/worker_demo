@@ -18,7 +18,7 @@ defmodule WorkerDemo.WorkerPool do
     {:ok, pool} = GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
 
     Enum.each(1..size, fn _ ->
-      {:ok, _} = start_worker(pool)
+      {:ok, _} = start_worker()
     end)
 
     {:ok, pool}
@@ -32,13 +32,16 @@ defmodule WorkerDemo.WorkerPool do
     {:ok, %{}}
   end
 
+  @doc """
+  Used by UI on load to display the state of all the workers on the cluster.
+  """
   @spec get_all_worker_states() :: [{pid(), Map}]
   def get_all_worker_states() do
     :pg.get_members(:workers)
     |> Enum.map(fn worker ->
       {worker,
        Task.async(fn ->
-         GenServer.call(worker, :dump_state)
+         Worker.get_state(worker)
        end)}
     end)
     |> Enum.map(fn {worker, task} ->
@@ -47,35 +50,69 @@ defmodule WorkerDemo.WorkerPool do
   end
 
   @doc """
-  Returns global list of idle workers
+  Queries all workers on all nodes to find the idle ones. Is there a more
+  efficient way? Having a :pg of only idle workers seems like just as much if
+  not more network traffic and more error prone.
   """
   @spec idle_workers() :: [pid()]
   def idle_workers() do
-    :pg.get_members(:idle_workers)
+    :pg.get_members(:workers)
+    |> Enum.map(fn worker ->
+      {worker,
+       Task.async(fn ->
+         Worker.is_idle?(worker)
+       end)}
+    end)
+    |> Enum.map(fn {worker, task} ->
+      if Task.await(task) do
+        worker
+      else
+        nil
+      end
+    end)
+    |> Enum.filter(& &1)
   end
 
   def subscribe_to_worker_states() do
     Phoenix.PubSub.subscribe(WorkerDemo.PubSub, "workers")
   end
 
-  @spec start_worker(GenServer.server()) :: {:ok, pid()}
-  def start_worker(worker_pool) do
-    GenServer.call(worker_pool, :start_worker)
+  @spec start_worker() :: {:ok, pid()}
+  def start_worker() do
+    GenServer.call(__MODULE__, :start_worker)
+  end
+
+  @doc """
+  Called by newly started workers to tell this process to monitor the worker.
+  """
+  @spec worker_started(pid()) :: :ok
+  def worker_started(worker) do
+    GenServer.cast(__MODULE__, {:worker_started, worker})
+    :ok
   end
 
   @impl true
   def handle_call(:start_worker, _from, state) do
     case DynamicSupervisor.start_child(WorkerPoolSupervisor, Worker) do
       {:ok, child} ->
-        Process.monitor(child)
-
         {:reply, {:ok, child}, state}
 
       {:error, reason} ->
         Logger.error("#{__MODULE__} error starting worker: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
+  @impl true
+  def handle_cast({:worker_started, pid}, state) do
+    Logger.debug("#{__MODULE__} monitoring worker: #{inspect(pid)}")
+    Process.monitor(pid)
+    {:noreply, state}
+  end
+
+  @doc """
+  Re-broadcasts the termination of the worker on pub sub.
+  """
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     Logger.info("#{__MODULE__} worker #{inspect(pid)} terminated, broadcasting")

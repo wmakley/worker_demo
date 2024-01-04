@@ -3,6 +3,7 @@ defmodule WorkerDemo.Worker do
 
   alias WorkerDemo.Jobs
   alias WorkerDemo.Jobs.Job
+  alias WorkerDemo.WorkerPool
 
   alias Phoenix.PubSub
 
@@ -19,19 +20,29 @@ defmodule WorkerDemo.Worker do
     GenServer.call(worker, {:assign, job})
   end
 
+  @spec get_state(worker()) :: Map
+  def get_state(worker) do
+    GenServer.call(worker, :get_state)
+  end
+
+  @spec is_idle?(worker()) :: boolean()
+  def is_idle?(worker) do
+    GenServer.call(worker, :is_idle?)
+  end
+
   @impl true
   def init(_) do
     state = %{job: nil, state: :idle}
     Logger.debug("#{__MODULE__} #{inspect(self())} starting with state: #{inspect(state)}")
 
     :ok = :pg.join(:workers, self())
-    :ok = :pg.join(:idle_workers, self())
+    WorkerPool.worker_started(self())
 
     {:ok, broadcast_state(state)}
   end
 
   @impl true
-  def handle_call(:dump_state, _from, state) do
+  def handle_call(:get_state, _from, state) do
     {:reply, state, state}
   end
 
@@ -47,8 +58,6 @@ defmodule WorkerDemo.Worker do
                picked_up_by: inspect(self())
              }) do
           {:ok, job} ->
-            :ok = :pg.leave(:idle_workers, self())
-
             new_state = %{state | state: :assigned_job, job: job}
             broadcast_state(new_state)
 
@@ -104,7 +113,6 @@ defmodule WorkerDemo.Worker do
         })
 
       new_state = %{new_state | job: nil, state: :idle}
-      :pg.join(:idle_workers, self())
 
       {:noreply, broadcast_state(new_state)}
     rescue
@@ -112,13 +120,21 @@ defmodule WorkerDemo.Worker do
         {:ok, _} =
           Jobs.update_job(state.job, %{
             status: Job.status_error(),
-            status_details: inspect(e),
+            status_details: error_message(e),
             picked_up_by: nil
           })
 
         # now crash
         raise e
     end
+  end
+
+  defp error_message(%{message: message}) do
+    message
+  end
+
+  defp error_message(e) do
+    inspect(e)
   end
 
   defp broadcast_state(state) do

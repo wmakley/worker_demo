@@ -137,7 +137,11 @@ defmodule WorkerDemoWeb.DashboardLive.Index do
 
   defp insert_job(socket, job) do
     socket
-    |> assign(:jobs, [job | socket.assigns.jobs])
+    |> assign(
+      :jobs,
+      [job | socket.assigns.jobs]
+      |> Enum.sort_by(fn job -> job.id end)
+    )
   end
 
   defp delete_job(socket, job) do
