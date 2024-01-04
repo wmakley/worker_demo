@@ -26,7 +26,7 @@ defmodule WorkerDemo.WorkerPool do
 
   @impl true
   def init(_) do
-    :pg.get_members(:workers)
+    :pg.get_local_members(:workers)
     |> Enum.each(&Process.monitor(&1))
 
     {:ok, %{}}
