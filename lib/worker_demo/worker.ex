@@ -110,6 +110,8 @@ defmodule WorkerDemo.Worker do
       {:ok, _} =
         Jobs.update_job(job, %{
           status: Job.status_complete(),
+          status_details: nil,
+          picked_up_by: nil,
           result: result
         })
 

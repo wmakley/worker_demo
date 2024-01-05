@@ -1,8 +1,9 @@
 defmodule WorkerDemo.WorkerPool do
   @moduledoc """
   Starts :size number of workers under the local WorkerPoolSupervisor,
-  provides utility functions for interacting with them, and broadcasts crashes
-  to pubsub.
+  provides utility functions for interacting with them, monitors them, and
+  re-broadcasts crashes. (Supervisor is still responsible for restarts,
+  this is just a monitor.)
   """
 
   use GenServer

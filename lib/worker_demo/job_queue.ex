@@ -30,15 +30,6 @@ defmodule WorkerDemo.JobQueue do
     PubSub.subscribe(WorkerDemo.PubSub, "job_queue")
   end
 
-  @doc """
-  Add yourself to the list of workers waiting for work, where "worker" can be
-  a pid or via tuple. Via tuple is necessary for distributed registry to work.
-  """
-  @spec enqueue_worker(Worker.worker()) :: :ok | {:error, term()}
-  def enqueue_worker(worker) do
-    GenServer.call({:global, __MODULE__}, {:enqueue_worker, worker})
-  end
-
   def init(opts) do
     Logger.debug("#{__MODULE__} starting with opts: #{inspect(opts)}")
 
