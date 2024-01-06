@@ -120,15 +120,24 @@ defmodule WorkerDemo.Worker do
       {:noreply, broadcast_state(new_state)}
     rescue
       e ->
-        {:ok, _} =
-          Jobs.update_job(state.job, %{
-            status: Job.status_error(),
-            status_details: error_message(e),
-            picked_up_by: nil
-          })
+        Logger.error(Exception.format(:error, e, __STACKTRACE__))
 
-        # now crash
-        raise e
+        # try to set the job to error on any exception:
+        case Jobs.update_job(state.job, %{
+               status: Job.status_error(),
+               status_details: error_message(e),
+               picked_up_by: nil
+             }) do
+          {:error, reason} ->
+            Logger.error(
+              "#{__MODULE__} Error setting job status to error: #{inspect(reason)}: #{inspect(self())}"
+            )
+
+          _ ->
+            :ok
+        end
+
+        reraise e, __STACKTRACE__
     end
   end
 
